@@ -1,0 +1,12 @@
+{
+    "name": "jwt auth plugin",
+    "license": "GPL-2.0",
+    "authors": [
+        {
+            "name": "Douglas Hammond"
+        }
+    ],
+    "require": {
+        "firebase/php-jwt": "dev-master"
+    }
+}
