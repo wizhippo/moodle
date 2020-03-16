@@ -1743,7 +1743,7 @@ class core_renderer extends renderer_base {
         $id = !empty($bc->attributes['id']) ? $bc->attributes['id'] : uniqid('block-');
         $context = new stdClass();
         $context->skipid = $bc->skipid;
-        $context->blockinstanceid = $bc->blockinstanceid;
+        $context->blockinstanceid = $bc->blockinstanceid ?: uniqid('fakeid-');
         $context->dockable = $bc->dockable;
         $context->id = $id;
         $context->hidden = $bc->collapsible == block_contents::HIDDEN;
@@ -2803,8 +2803,8 @@ EOD;
             $output .= $this->header();
         }
 
-        $message = '<p class="errormessage">' . $message . '</p>'.
-                '<p class="errorcode"><a href="' . $moreinfourl . '">' .
+        $message = '<p class="errormessage">' . s($message) . '</p>'.
+                '<p class="errorcode"><a href="' . s($moreinfourl) . '">' .
                 get_string('moreinformation') . '</a></p>';
         if (empty($CFG->rolesactive)) {
             $message .= '<p class="errormessage">' . get_string('installproblem', 'error') . '</p>';

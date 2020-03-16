@@ -2028,16 +2028,18 @@ function xmldb_main_upgrade($oldversion) {
 
     if ($oldversion < 2018092800.02) {
         // Delete any contacts that are not mutual (meaning they both haven't added each other).
-        $sql = "SELECT c1.id
-                  FROM {message_contacts} c1
-             LEFT JOIN {message_contacts} c2
-                    ON c1.userid = c2.contactid
-                   AND c1.contactid = c2.userid
-                 WHERE c2.id IS NULL";
-        if ($contacts = $DB->get_records_sql($sql)) {
-            list($insql, $inparams) = $DB->get_in_or_equal(array_keys($contacts));
-            $DB->delete_records_select('message_contacts', "id $insql", $inparams);
-        }
+        do {
+            $sql = "SELECT c1.id
+                      FROM {message_contacts} c1
+                 LEFT JOIN {message_contacts} c2
+                        ON c1.userid = c2.contactid
+                       AND c1.contactid = c2.userid
+                     WHERE c2.id IS NULL";
+            if ($contacts = $DB->get_records_sql($sql, null, 0, 1000)) {
+                list($insql, $inparams) = $DB->get_in_or_equal(array_keys($contacts));
+                $DB->delete_records_select('message_contacts', "id $insql", $inparams);
+            }
+        } while ($contacts);
 
         upgrade_main_savepoint(true, 2018092800.02);
     }
@@ -3361,7 +3363,7 @@ function xmldb_main_upgrade($oldversion) {
         }
 
         // Add default backpacks.
-        require_once($CFG->libdir.'/badgeslib.php'); // Core Upgrade-related functions for badges only.
+        require_once($CFG->dirroot . '/badges/upgradelib.php'); // Core install and upgrade related functions only for badges.
         badges_install_default_backpacks();
 
         // Main savepoint reached.
@@ -3402,7 +3404,7 @@ function xmldb_main_upgrade($oldversion) {
                   FROM {event_subscriptions} es
              LEFT JOIN {user} u ON u.id = es.userid
                  WHERE u.deleted = 1 OR u.id IS NULL";
-        $deletedusers = $DB->get_field_sql($sql);
+        $deletedusers = $DB->get_fieldset_sql($sql);
         if ($deletedusers) {
             list($sql, $params) = $DB->get_in_or_equal($deletedusers);
 
@@ -3426,6 +3428,85 @@ function xmldb_main_upgrade($oldversion) {
 
         // Main savepoint reached.
         upgrade_main_savepoint(true, 2019052002.01);
+    }
+
+    if ($oldversion < 2019052002.07) {
+        // Rename the official moodle sites directory the site is registered with.
+        $DB->execute("UPDATE {registration_hubs}
+                         SET hubname = ?, huburl = ?
+                       WHERE huburl = ?", ['moodle', 'https://stats.moodle.org', 'https://moodle.net']);
+
+        // Convert the hub site specific settings to the new naming format without the hub URL in the name.
+        $hubconfig = get_config('hub');
+
+        if (!empty($hubconfig)) {
+            foreach (upgrade_convert_hub_config_site_param_names($hubconfig, 'https://moodle.net') as $name => $value) {
+                set_config($name, $value, 'hub');
+            }
+        }
+
+        upgrade_main_savepoint(true, 2019052002.07);
+    }
+
+    if ($oldversion < 2019052003.05) {
+        // Delete any role assignments for roles which no longer exist.
+        $DB->delete_records_select('role_assignments', "roleid NOT IN (SELECT id FROM {role})");
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2019052003.05);
+    }
+
+
+    if ($oldversion < 2019052004.02) {
+        // Delete all orphaned subscription events.
+        $select = "subscriptionid IS NOT NULL
+                   AND subscriptionid NOT IN (SELECT id from {event_subscriptions})";
+        $DB->delete_records_select('event', $select);
+
+        upgrade_main_savepoint(true, 2019052004.02);
+    }
+
+    if ($oldversion < 2019052004.05) {
+        global $DB;
+        // Delete any associated files.
+        $fs = get_file_storage();
+        $sql = "SELECT cuc.id, cuc.userid
+                  FROM {competency_usercomp} cuc
+             LEFT JOIN {user} u ON cuc.userid = u.id
+                 WHERE u.deleted = 1";
+        $usercompetencies = $DB->get_records_sql($sql);
+        foreach ($usercompetencies as $usercomp) {
+            $DB->delete_records('competency_evidence', ['usercompetencyid' => $usercomp->id]);
+            $DB->delete_records('competency_usercompcourse', ['userid' => $usercomp->userid]);
+            $DB->delete_records('competency_usercompplan', ['userid' => $usercomp->userid]);
+            $DB->delete_records('competency_usercomp', ['userid' => $usercomp->userid]);
+        }
+
+        $sql = "SELECT cue.id, cue.userid
+                  FROM {competency_userevidence} cue
+             LEFT JOIN {user} u ON cue.userid = u.id
+                 WHERE u.deleted = 1";
+        $userevidences = $DB->get_records_sql($sql);
+        foreach ($userevidences as $userevidence) {
+            $DB->delete_records('competency_userevidencecomp', ['userevidenceid' => $userevidence->id]);
+            $DB->delete_records('competency_userevidence', ['id' => $userevidence->id]);
+
+            $context = context_user::instance($userevidence->userid);
+            $fs->delete_area_files($context->id, 'core_competency', 'userevidence', $userevidence->id);
+        }
+
+        $sql = "SELECT cp.id
+                  FROM {competency_plan} cp
+             LEFT JOIN {user} u ON cp.userid = u.id
+                 WHERE u.deleted = 1";
+        $userplans = $DB->get_records_sql($sql);
+        foreach ($userplans as $userplan) {
+            $DB->delete_records('competency_plancomp', ['planid' => $userplan->id]);
+            $DB->delete_records('competency_plan', ['id' => $userplan->id]);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2019052004.05);
     }
 
     return true;

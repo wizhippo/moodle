@@ -32,5 +32,7 @@ Our changes:
    Check if fixed upstream during the next upgrade and remove this note. (8638b3f1441d4b928)
  * MDL-58546 replaced each() with foreach for PHP 7.2 compatibility.
    pull request upstream: https://github.com/ADOdb/ADOdb/pull/373
+ * MDL-65920 solved PHP 7.2 deprecations; create_function() and each().
+ * MDL-67414 Fix to make the library PostgreSQL 12.x compliant (upstream: a4876f100602c2ce4).
 
-skodak, iarenaza, moodler, stronk7, abgreeve, lameze, ankitagarwal, marinaglancy
+skodak, iarenaza, moodler, stronk7, abgreeve, lameze, ankitagarwal, marinaglancy, matteo

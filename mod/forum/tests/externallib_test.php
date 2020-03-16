@@ -527,7 +527,7 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
      * Tests is similar to the get_forum_discussion_posts only utilizing the new return structure and entities
      */
     public function test_mod_forum_get_discussion_posts() {
-        global $CFG, $PAGE;
+        global $CFG;
 
         $this->resetAfterTest(true);
 
@@ -537,6 +537,9 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
         $urlfactory = mod_forum\local\container::get_url_factory();
         $legacyfactory = mod_forum\local\container::get_legacy_data_mapper_factory();
         $entityfactory = mod_forum\local\container::get_entity_factory();
+
+        // Create course to add the module.
+        $course1 = self::getDataGenerator()->create_course();
 
         // Create a user who can track forums.
         $record = new stdClass();
@@ -550,7 +553,7 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
             'fullname' => fullname($user2),
             'groups' => [],
             'urls' => [
-                'profile' => $urlfactory->get_author_profile_url($user2entity),
+                'profile' => $urlfactory->get_author_profile_url($user2entity, $course1->id)->out(false),
                 'profileimage' => $urlfactory->get_author_profile_image_url($user2entity),
             ]
         ];
@@ -563,7 +566,7 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
             'fullname' => fullname($user3),
             'groups' => [],
             'urls' => [
-                'profile' => $urlfactory->get_author_profile_url($user3entity),
+                'profile' => $urlfactory->get_author_profile_url($user3entity, $course1->id)->out(false),
                 'profileimage' => $urlfactory->get_author_profile_image_url($user3entity),
             ]
         ];
@@ -572,9 +575,6 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
 
         // Set the first created user to the test user.
         self::setUser($user1);
-
-        // Create course to add the module.
-        $course1 = self::getDataGenerator()->create_course();
 
         // Forum with tracking off.
         $record = new stdClass();
@@ -683,7 +683,8 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
             'html' => [
                 'rating' => null,
                 'taglist' => null,
-                'authorsubheading' => $forumgenerator->get_author_subheading_html((object)$exporteduser3, $discussion1reply2->created)
+                'authorsubheading' => $forumgenerator->get_author_subheading_html((object)$exporteduser3,
+                        $discussion1reply2->created)
             ],
             'capabilities' => [
                 'view' => 1,
@@ -699,7 +700,8 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
             'urls' => [
                 'view' => $urlfactory->get_view_post_url_from_post_id($discussion1reply2->discussion, $discussion1reply2->id),
                 'viewisolated' => $isolatedurl->out(false),
-                'viewparent' => $urlfactory->get_view_post_url_from_post_id($discussion1reply2->discussion, $discussion1reply2->parent),
+                'viewparent' => $urlfactory->get_view_post_url_from_post_id($discussion1reply2->discussion,
+                        $discussion1reply2->parent),
                 'edit' => null,
                 'delete' =>null,
                 'split' => null,
@@ -738,7 +740,8 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
             'html' => [
                 'rating' => null,
                 'taglist' => null,
-                'authorsubheading' => $forumgenerator->get_author_subheading_html((object)$exporteduser2, $discussion1reply1->created)
+                'authorsubheading' => $forumgenerator->get_author_subheading_html((object)$exporteduser2,
+                        $discussion1reply1->created)
             ],
             'capabilities' => [
                 'view' => 1,
@@ -754,7 +757,8 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
             'urls' => [
                 'view' => $urlfactory->get_view_post_url_from_post_id($discussion1reply1->discussion, $discussion1reply1->id),
                 'viewisolated' => $isolatedurl->out(false),
-                'viewparent' => $urlfactory->get_view_post_url_from_post_id($discussion1reply1->discussion, $discussion1reply1->parent),
+                'viewparent' => $urlfactory->get_view_post_url_from_post_id($discussion1reply1->discussion,
+                        $discussion1reply1->parent),
                 'edit' => null,
                 'delete' =>null,
                 'split' => null,
@@ -2353,5 +2357,131 @@ class mod_forum_external_testcase extends externallib_advanced_testcase {
                     'value' => false,
                 ],
             ]);
+    }
+
+    /**
+     * Test trusted text enabled.
+     */
+    public function test_trusted_text_enabled() {
+        global $USER, $CFG;
+
+        $this->resetAfterTest(true);
+        $CFG->enabletrusttext = 1;
+
+        $dangeroustext = '<button>Untrusted text</button>';
+        $cleantext = 'Untrusted text';
+
+        // Create courses to add the modules.
+        $course = self::getDataGenerator()->create_course();
+        $user1 = self::getDataGenerator()->create_user();
+
+        // First forum with tracking off.
+        $record = new stdClass();
+        $record->course = $course->id;
+        $record->type = 'qanda';
+        $forum = self::getDataGenerator()->create_module('forum', $record);
+        $context = context_module::instance($forum->cmid);
+
+        // Add discussions to the forums.
+        $discussionrecord = new stdClass();
+        $discussionrecord->course = $course->id;
+        $discussionrecord->userid = $user1->id;
+        $discussionrecord->forum = $forum->id;
+        $discussionrecord->message = $dangeroustext;
+        $discussionrecord->messagetrust  = trusttext_trusted($context);
+        $discussion1 = self::getDataGenerator()->get_plugin_generator('mod_forum')->create_discussion($discussionrecord);
+
+        self::setAdminUser();
+        $discussionrecord->userid = $USER->id;
+        $discussionrecord->messagetrust  = trusttext_trusted($context);
+        $discussion2 = self::getDataGenerator()->get_plugin_generator('mod_forum')->create_discussion($discussionrecord);
+
+        $discussions = mod_forum_external::get_forum_discussions_paginated($forum->id);
+        $discussions = external_api::clean_returnvalue(mod_forum_external::get_forum_discussions_paginated_returns(), $discussions);
+
+        $this->assertCount(2, $discussions['discussions']);
+        $this->assertCount(0, $discussions['warnings']);
+        // Admin message is fully trusted.
+        $this->assertEquals(1, $discussions['discussions'][0]['messagetrust']);
+        $this->assertEquals($dangeroustext, $discussions['discussions'][0]['message']);
+        // Student message is not trusted.
+        $this->assertEquals(0, $discussions['discussions'][1]['messagetrust']);
+        $this->assertEquals($cleantext, $discussions['discussions'][1]['message']);
+
+        // Get posts now.
+        $posts = mod_forum_external::get_forum_discussion_posts($discussion2->id);
+        $posts = external_api::clean_returnvalue(mod_forum_external::get_forum_discussion_posts_returns(), $posts);
+        // Admin message is fully trusted.
+        $this->assertEquals(1, $posts['posts'][0]['messagetrust']);
+        $this->assertEquals($dangeroustext, $posts['posts'][0]['message']);
+
+        $posts = mod_forum_external::get_forum_discussion_posts($discussion1->id);
+        $posts = external_api::clean_returnvalue(mod_forum_external::get_forum_discussion_posts_returns(), $posts);
+        // Student message is not trusted.
+        $this->assertEquals(0, $posts['posts'][0]['messagetrust']);
+        $this->assertEquals($cleantext, $posts['posts'][0]['message']);
+    }
+
+    /**
+     * Test trusted text disabled.
+     */
+    public function test_trusted_text_disabled() {
+        global $USER, $CFG;
+
+        $this->resetAfterTest(true);
+        $CFG->enabletrusttext = 0;
+
+        $dangeroustext = '<button>Untrusted text</button>';
+        $cleantext = 'Untrusted text';
+
+        // Create courses to add the modules.
+        $course = self::getDataGenerator()->create_course();
+        $user1 = self::getDataGenerator()->create_user();
+
+        // First forum with tracking off.
+        $record = new stdClass();
+        $record->course = $course->id;
+        $record->type = 'qanda';
+        $forum = self::getDataGenerator()->create_module('forum', $record);
+        $context = context_module::instance($forum->cmid);
+
+        // Add discussions to the forums.
+        $discussionrecord = new stdClass();
+        $discussionrecord->course = $course->id;
+        $discussionrecord->userid = $user1->id;
+        $discussionrecord->forum = $forum->id;
+        $discussionrecord->message = $dangeroustext;
+        $discussionrecord->messagetrust  = trusttext_trusted($context);
+        $discussion1 = self::getDataGenerator()->get_plugin_generator('mod_forum')->create_discussion($discussionrecord);
+
+        self::setAdminUser();
+        $discussionrecord->userid = $USER->id;
+        $discussionrecord->messagetrust  = trusttext_trusted($context);
+        $discussion2 = self::getDataGenerator()->get_plugin_generator('mod_forum')->create_discussion($discussionrecord);
+
+        $discussions = mod_forum_external::get_forum_discussions($forum->id);
+        $discussions = external_api::clean_returnvalue(mod_forum_external::get_forum_discussions_returns(), $discussions);
+
+        $this->assertCount(2, $discussions['discussions']);
+        $this->assertCount(0, $discussions['warnings']);
+        // Admin message is not trusted because enabletrusttext is disabled.
+        $this->assertEquals(0, $discussions['discussions'][0]['messagetrust']);
+        $this->assertEquals($cleantext, $discussions['discussions'][0]['message']);
+        // Student message is not trusted.
+        $this->assertEquals(0, $discussions['discussions'][1]['messagetrust']);
+        $this->assertEquals($cleantext, $discussions['discussions'][1]['message']);
+
+        // Get posts now.
+        $posts = mod_forum_external::get_forum_discussion_posts($discussion2->id);
+        $posts = external_api::clean_returnvalue(mod_forum_external::get_forum_discussion_posts_returns(), $posts);
+        // Admin message is not trusted because enabletrusttext is disabled.
+        $this->assertEquals(0, $posts['posts'][0]['messagetrust']);
+        $this->assertEquals($cleantext, $posts['posts'][0]['message']);
+
+        $posts = mod_forum_external::get_forum_discussion_posts($discussion1->id);
+        $posts = external_api::clean_returnvalue(mod_forum_external::get_forum_discussion_posts_returns(), $posts);
+        // Student message is not trusted.
+        $this->assertEquals(0, $posts['posts'][0]['messagetrust']);
+        $this->assertEquals($cleantext, $posts['posts'][0]['message']);
     }
 }

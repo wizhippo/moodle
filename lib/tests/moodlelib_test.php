@@ -2249,6 +2249,14 @@ class core_moodlelib_testcase extends advanced_testcase {
         // Custom number of decimal places.
         $this->assertEquals('5.43000', format_float(5.43, 5));
 
+        // Auto detect the number of decimal places.
+        $this->assertEquals('5.43', format_float(5.43, -1));
+        $this->assertEquals('5.43', format_float(5.43000, -1));
+        $this->assertEquals('5', format_float(5, -1));
+        $this->assertEquals('5', format_float(5.0, -1));
+        $this->assertEquals('0.543', format_float('5.43e-1', -1));
+        $this->assertEquals('0.543', format_float('5.43000e-1', -1));
+
         // Option to strip ending zeros after rounding.
         $this->assertEquals('5.43', format_float(5.43, 5, true, true));
         $this->assertEquals('5', format_float(5.0001, 3, true, true));
@@ -3633,6 +3641,10 @@ class core_moodlelib_testcase extends advanced_testcase {
      * Tests the getremoteaddr() function.
      */
     public function test_getremoteaddr() {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $CFG->getremoteaddrconf = GETREMOTEADDR_SKIP_HTTP_CLIENT_IP;
         $xforwardedfor = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? $_SERVER['HTTP_X_FORWARDED_FOR'] : null;
 
         $_SERVER['HTTP_X_FORWARDED_FOR'] = '';
@@ -3649,27 +3661,27 @@ class core_moodlelib_testcase extends advanced_testcase {
 
         $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,127.0.0.2';
         $twoip = getremoteaddr();
-        $this->assertEquals('127.0.0.1', $twoip);
+        $this->assertEquals('127.0.0.2', $twoip);
 
-        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,127.0.0.2, 127.0.0.3';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,127.0.0.2,127.0.0.3';
         $threeip = getremoteaddr();
-        $this->assertEquals('127.0.0.1', $threeip);
+        $this->assertEquals('127.0.0.3', $threeip);
 
-        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1:65535,127.0.0.2';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,127.0.0.2:65535';
         $portip = getremoteaddr();
-        $this->assertEquals('127.0.0.1', $portip);
+        $this->assertEquals('127.0.0.2', $portip);
 
-        $_SERVER['HTTP_X_FORWARDED_FOR'] = '0:0:0:0:0:0:0:1,127.0.0.2';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,0:0:0:0:0:0:0:2';
         $portip = getremoteaddr();
-        $this->assertEquals('0:0:0:0:0:0:0:1', $portip);
+        $this->assertEquals('0:0:0:0:0:0:0:2', $portip);
 
-        $_SERVER['HTTP_X_FORWARDED_FOR'] = '0::1,127.0.0.2';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,0::2';
         $portip = getremoteaddr();
-        $this->assertEquals('0:0:0:0:0:0:0:1', $portip);
+        $this->assertEquals('0:0:0:0:0:0:0:2', $portip);
 
-        $_SERVER['HTTP_X_FORWARDED_FOR'] = '[0:0:0:0:0:0:0:1]:65535,127.0.0.2';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,[0:0:0:0:0:0:0:2]:65535';
         $portip = getremoteaddr();
-        $this->assertEquals('0:0:0:0:0:0:0:1', $portip);
+        $this->assertEquals('0:0:0:0:0:0:0:2', $portip);
 
         $_SERVER['HTTP_X_FORWARDED_FOR'] = $xforwardedfor;
 
