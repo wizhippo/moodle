@@ -302,7 +302,7 @@ function assign_update_events($assign, $override = null) {
         // Events module won't show user events when the courseid is nonzero.
         $event->courseid    = ($userid) ? 0 : $assigninstance->course;
         $event->groupid     = $groupid;
-        $event->userid      = 0;
+        $event->userid      = $userid;
         $event->modulename  = 'assign';
         $event->instance    = $assigninstance->id;
         $event->timestart   = $duedate;
@@ -332,8 +332,6 @@ function assign_update_events($assign, $override = null) {
             $params = new stdClass();
             $params->assign = $assigninstance->name;
             $eventname = get_string('overrideusereventname', 'assign', $params);
-            // Only set userid for user override events.
-            $event->userid = $userid;
             // Set user override priority.
             $event->priority = CALENDAR_EVENT_USER_OVERRIDE_PRIORITY;
         } else {
@@ -1554,8 +1552,8 @@ function mod_assign_core_calendar_provide_event_action(calendar_event $event,
             'id' => $cm->id,
             'action' => 'grader'
         ]);
-        $itemcount = $assign->count_submissions_need_grading();
         $actionable = $assign->can_grade($userid) && (time() >= $assign->get_instance()->allowsubmissionsfromdate);
+        $itemcount = $actionable ? $assign->count_submissions_need_grading() : 0;
     } else {
         $usersubmission = $assign->get_user_submission($userid, false);
         if ($usersubmission && $usersubmission->status === ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
